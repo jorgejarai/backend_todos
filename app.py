@@ -22,6 +22,7 @@ def index():
     return "Nada que ver aquí. Circulando, por favor"
 
 import routes.users # nopep8
+import routes.todos # nopep8
 
 
 if __name__ == '__main__':
