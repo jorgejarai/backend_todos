@@ -1,7 +1,7 @@
 from __main__ import app
 
 from flask import request, jsonify
-from flask_jwt_extended import create_access_token
+from flask_jwt_extended import jwt_required, create_access_token
 import hashlib
 
 from database import Database
@@ -43,3 +43,10 @@ def login():
             }), 200
         
     return jsonify({"success": False, "message": "Wrong credentials"}), 401
+
+@app.route('/api/v1/users/me', methods=['GET'])
+@jwt_required()
+def get_me():
+    return jsonify({
+        "success": True,
+    }), 200
