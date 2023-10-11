@@ -12,6 +12,13 @@ users = Database().pymongo.db.users
 @app.route('/api/v1/users', methods=['POST'])
 def create_user():
     new_user = request.get_json()
+
+    if not "name" in new_user or not "username" in new_user or not "password" in new_user:
+        return jsonify({
+            "success": False,
+            "message": "Missing required fields"
+        }), 400
+
     new_user['password'] = hashlib.sha256(
         new_user['password'].encode('utf-8')).hexdigest()
     doc = users.find_one({
