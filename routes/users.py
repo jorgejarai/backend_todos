@@ -1,7 +1,7 @@
 from __main__ import app
 
 from flask import request, jsonify
-from flask_jwt_extended import jwt_required, create_access_token
+from flask_jwt_extended import get_jwt_identity, jwt_required, create_access_token
 import hashlib
 
 from database import Database
@@ -52,6 +52,12 @@ def login():
 @app.route('/api/v1/users/me', methods=['GET'])
 @jwt_required()
 def get_me():
+    user = users.find_one({"username": get_jwt_identity()})
+
     return jsonify({
         "success": True,
+        "user": {
+            "username": user['username'],
+            "name": user['name']
+        }
     }), 200
