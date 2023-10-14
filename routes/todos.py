@@ -3,7 +3,7 @@ from bson import ObjectId
 
 from bson import json_util, ObjectId
 from flask import request, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from functools import wraps
 
 from database import Database
@@ -11,7 +11,7 @@ from database import Database
 todos = Database().pymongo.db.todos
 users = Database().pymongo.db.users
 
-reqAuth = False
+reqAuth = True
 
 # Custom decorator to conditionally apply @jwt_required
 
@@ -30,9 +30,9 @@ def custom_jwt_required(view_func):
 @app.route('/api/v1/todos', methods=['GET'])
 @custom_jwt_required
 def get_todos():
-    currentUser = request.get_json().get("currentUser")
+    currentUser = users.find_one({"username": get_jwt_identity()})
 
-    matching_todos = todos.find({"createdBy": currentUser})
+    matching_todos = todos.find({"createdBy": ObjectId(currentUser[0]["_id"])})
     # matching_todos = todos.find({"createdBy": currentUser}, {"_id": 0})
     # matching_todos = list(matching_todos)
     # matching_todos = [json_util.dumps(todo) for todo in matching_todos]
@@ -64,7 +64,7 @@ def get_todos():
 def create_todo():
     new_todo = request.get_json()
 
-    if not all(key in new_todo for key in ("createdBy", "title", "description", "startDate", "endDate", "labels")):
+    if not all(key in new_todo for key in ("title", "description", "startDate", "endDate", "labels")):
         return jsonify({
             "success": False,
             "message": "Missing required fields"
@@ -75,6 +75,9 @@ def create_todo():
             "success": False,
             "message": "Labels should be a list"
         }), 400
+
+    currentUser = users.find_one({"username": get_jwt_identity()})
+    new_todo["createdBy"] = ObjectId(currentUser["_id"])
 
     todos.insert_one(new_todo)
 
@@ -92,6 +95,13 @@ def get_todo(id):
     result = todos.find_one({"_id": ObjectId(id)})
 
     if result is not None:
+        currentUser = users.find_one({"username": get_jwt_identity()})
+        if result["createdBy"] != ObjectId(currentUser["_id"]):
+            return jsonify({
+                "success": False,
+                "message": "TODO not found"
+            }), 404
+
         return jsonify({
             "success": True,
             "todo": {
@@ -118,8 +128,19 @@ def update_todo(id):
     if existing_todo is None:
         return jsonify({"success": False, "message": "TODO not found"}), 404
 
+    currentUser = users.find_one({"username": get_jwt_identity()})
+    if existing_todo["createdBy"] != ObjectId(currentUser["_id"]):
+        return jsonify({
+            "success": False,
+            "message": "TODO not found"
+        }), 404
+
     # Get the updated data from the request JSON
     updated_data = request.get_json()
+
+    # Remove _id and createdBy from the updated data
+    updated_data.pop("_id", None)
+    updated_data.pop("createdBy", None)
 
     # Update the todo with the new data
     result = todos.update_one({"_id": ObjectId(id)}, {
@@ -138,6 +159,13 @@ def delete_todo(id):
 
     if existing_todo is None:
         return jsonify({"success": False, "message": "TODO not found"}), 404
+
+    currentUser = users.find_one({"username": get_jwt_identity()})
+    if existing_todo["createdBy"] != ObjectId(currentUser["_id"]):
+        return jsonify({
+            "success": False,
+            "message": "TODO not found"
+        }), 404
 
     result = todos.delete_one({"_id": ObjectId(id)})
 
