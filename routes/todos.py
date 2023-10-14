@@ -1,126 +1,154 @@
 from __main__ import app
 from bson import ObjectId
 
+from bson import json_util, ObjectId
 from flask import request, jsonify
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import jwt_required
+from functools import wraps
 
 from database import Database
 
 todos = Database().pymongo.db.todos
 users = Database().pymongo.db.users
 
+reqAuth = False
+
+# Custom decorator to conditionally apply @jwt_required
+
+
+def custom_jwt_required(view_func):
+    @wraps(view_func)
+    def decorated_view(*args, **kwargs):
+        if reqAuth:
+            return jwt_required()(view_func)(*args, **kwargs)
+        else:
+            return view_func(*args, **kwargs)
+
+    return decorated_view
+
 
 @app.route('/api/v1/todos', methods=['GET'])
-@jwt_required()
+@custom_jwt_required
 def get_todos():
-    user = users.find_one({"username": get_jwt_identity()})
+    currentUser = request.get_json().get("currentUser")
 
-    user_todos = list(todos.find({"created_by": user['_id']}))
+    matching_todos = todos.find({"createdBy": currentUser})
+    # matching_todos = todos.find({"createdBy": currentUser}, {"_id": 0})
+    # matching_todos = list(matching_todos)
+    # matching_todos = [json_util.dumps(todo) for todo in matching_todos]
+    matching_todos = [json_util.dumps(todo, default=str)
+                      for todo in matching_todos]
+    # formatted_todos = []
+    # for todo in matching_todos:
+    #     formatted_todo = {
+    #         # "_id": str(todo["_id"]),
+    #         "createdBy": todo["createdBy"],
+    #         "title": todo["title"],
+    #         "description": todo["description"],
+    #         "startDate": todo["startDate"],
+    #         "endDate": todo["endDate"],
+    #         "labels": todo["labels"]
+    #     }
+    #     formatted_todos.append(formatted_todo)
 
-    for todo in user_todos:
-        todo["_id"] = str(todo["_id"])
-        todo["created_by"] = str(todo["created_by"])
+    # #  deberíamos verificar cuando no hay TODOS?
 
     return jsonify({
         "success": True,
-        "todos": user_todos
+        "todos": matching_todos
     }), 200
 
 
 @app.route('/api/v1/todos', methods=['POST'])
-@jwt_required()
+@custom_jwt_required
 def create_todo():
     new_todo = request.get_json()
 
-    user = users.find_one({"username": get_jwt_identity()})
+    if not all(key in new_todo for key in ("createdBy", "title", "description", "startDate", "endDate", "labels")):
+        return jsonify({
+            "success": False,
+            "message": "Missing required fields"
+        }), 400
 
-    new_todo['created_by'] = user['_id']
-    saved_todo = todos.insert_one(new_todo)
+    if not isinstance(new_todo["labels"], list):
+        return jsonify({
+            "success": False,
+            "message": "Labels should be a list"
+        }), 400
+
+    todos.insert_one(new_todo)
 
     return jsonify({
         "success": True,
-        "todoId": str(saved_todo.inserted_id),
+        "message": "TODO created successfully"
     }), 201
 
 
-@app.route('/api/v1/todos/<todo_id>', methods=['GET'])
-@jwt_required()
-def get_todo(todo_id):
-    todo = todos.find_one({"_id": ObjectId(todo_id)})
+@app.route('/api/v1/todos/<id>', methods=['GET'])
+@custom_jwt_required
+def get_todo(id):
+    # need to catch an error where <id> is not a valid OjbetcId
+    # bson.errors.InvalidId: '652ac5ac62a3529a24f8a98p' is not a valid ObjectId, it must be a 12-byte input or a 24-character hex string
+    result = todos.find_one({"_id": ObjectId(id)})
 
-    if not todo:
+    if result is not None:
+        return jsonify({
+            "success": True,
+            "todo": {
+                "createdBy": result["createdBy"],
+                "title": result["title"],
+                "description": result["description"],
+                "startDate": result["startDate"],
+                "endDate": result["endDate"],
+                "labels": result["labels"]
+            }
+        }), 200
+    else:
         return jsonify({
             "success": False,
-            "message": "Todo not found"
+            "message": "couldn't find TODO"
         }), 404
 
-    user = users.find_one({"username": get_jwt_identity()})
 
-    if todo['created_by'] != user['_id']:
+@app.route('/api/v1/todos/<id>', methods=['PUT'])
+@custom_jwt_required
+def update_todo(id):
+    existing_todo = todos.find_one({"_id": ObjectId(id)})
+
+    if existing_todo is None:
+        return jsonify({"success": False, "message": "TODO not found"}), 404
+
+    # Get the updated data from the request JSON
+    updated_data = request.get_json()
+
+    # Update the todo with the new data
+    result = todos.update_one({"_id": ObjectId(id)}, {
+                              "$set": updated_data})
+
+    if result.modified_count == 1:
+        return jsonify({"success": True, "message": "Todo updated successfully"}), 200
+    else:
+        return jsonify({"success": False, "message": "Failed to update todo"}), 500
+
+
+@app.route('/api/v1/todos/<id>', methods=['DELETE'])
+@custom_jwt_required
+def delete_todo(id):
+    existing_todo = todos.find_one({"_id": ObjectId(id)})
+
+    if existing_todo is None:
+        return jsonify({"success": False, "message": "TODO not found"}), 404
+
+    result = todos.delete_one({"_id": ObjectId(id)})
+
+    if result.deleted_count == 1:
+        return jsonify({
+            "success": True,
+            "message": "TODO deleted successfully"
+        }), 200
+    else:
         return jsonify({
             "success": False,
-            "message": "Todo not founnd"
-        }), 404
-
-    todo["_id"] = str(todo["_id"])
-    todo["created_by"] = str(todo["created_by"])
-
-    return jsonify({
-        "success": True,
-        "todo": todo
-    }), 200
-
-
-@app.route('/api/v1/todos/<todo_id>', methods=['PUT'])
-@jwt_required()
-def update_todo(todo_id):
-    todo = todos.find_one({"_id": ObjectId(todo_id)})
-
-    if not todo:
-        return jsonify({
-            "success": False,
-            "message": "Todo not found"
-        }), 404
-
-    user = users.find_one({"username": get_jwt_identity()})
-
-    if todo['created_by'] != user['_id']:
-        return jsonify({
-            "success": False,
-            "message": "Todo not founnd"
-        }), 404
-
-    request.get_json().pop("_id", None)
-    request.get_json().pop("created_by", None)
-
-    todos.update_one({"_id": ObjectId(todo_id)}, {"$set": request.get_json()})
-
-    return jsonify({
-        "success": True,
-    }), 200
-
-
-@app.route('/api/v1/todos/<todo_id>', methods=['DELETE'])
-@jwt_required()
-def delete_todo(todo_id):
-    todo = todos.find_one({"_id": ObjectId(todo_id)})
-
-    if not todo:
-        return jsonify({
-            "success": False,
-            "message": "Todo not found"
-        }), 404
-
-    user = users.find_one({"username": get_jwt_identity()})
-
-    if todo['created_by'] != user['_id']:
-        return jsonify({
-            "success": False,
-            "message": "Todo not founnd"
-        }), 404
-
-    todos.delete_one({"_id": ObjectId(todo_id)})
-
-    return jsonify({
-        "success": True,
-    }), 200
+            "message": "Failed to delete TODO",
+            "id": id
+        }), 500
