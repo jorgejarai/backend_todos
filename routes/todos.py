@@ -13,10 +13,9 @@ users = Database().pymongo.db.users
 
 reqAuth = True
 
-# Custom decorator to conditionally apply @jwt_required
-
 
 def custom_jwt_required(view_func):
+    """Custom decorator to conditionally apply @jwt_required"""
     @wraps(view_func)
     def decorated_view(*args, **kwargs):
         if reqAuth:
@@ -32,26 +31,9 @@ def custom_jwt_required(view_func):
 def get_todos():
     currentUser = users.find_one({"username": get_jwt_identity()})
 
-    matching_todos = todos.find({"createdBy": ObjectId(currentUser[0]["_id"])})
-    # matching_todos = todos.find({"createdBy": currentUser}, {"_id": 0})
-    # matching_todos = list(matching_todos)
-    # matching_todos = [json_util.dumps(todo) for todo in matching_todos]
-    matching_todos = [json_util.dumps(todo, default=str)
+    matching_todos = todos.find({"createdBy": ObjectId(currentUser["_id"])})
+    matching_todos = [{**todo, "_id": str(todo["_id"]), "createdBy": str(todo['createdBy'])}
                       for todo in matching_todos]
-    # formatted_todos = []
-    # for todo in matching_todos:
-    #     formatted_todo = {
-    #         # "_id": str(todo["_id"]),
-    #         "createdBy": todo["createdBy"],
-    #         "title": todo["title"],
-    #         "description": todo["description"],
-    #         "startDate": todo["startDate"],
-    #         "endDate": todo["endDate"],
-    #         "labels": todo["labels"]
-    #     }
-    #     formatted_todos.append(formatted_todo)
-
-    # #  deberíamos verificar cuando no hay TODOS?
 
     return jsonify({
         "success": True,
@@ -90,8 +72,6 @@ def create_todo():
 @app.route('/api/v1/todos/<id>', methods=['GET'])
 @custom_jwt_required
 def get_todo(id):
-    # need to catch an error where <id> is not a valid OjbetcId
-    # bson.errors.InvalidId: '652ac5ac62a3529a24f8a98p' is not a valid ObjectId, it must be a 12-byte input or a 24-character hex string
     result = todos.find_one({"_id": ObjectId(id)})
 
     if result is not None:
@@ -105,12 +85,8 @@ def get_todo(id):
         return jsonify({
             "success": True,
             "todo": {
-                "createdBy": result["createdBy"],
-                "title": result["title"],
-                "description": result["description"],
-                "startDate": result["startDate"],
-                "endDate": result["endDate"],
-                "labels": result["labels"]
+                **result,
+                "_id": str(result["_id"]),
             }
         }), 200
     else:
