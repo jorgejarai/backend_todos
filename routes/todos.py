@@ -156,3 +156,22 @@ def delete_todo(id):
             "message": "Failed to delete TODO",
             "id": id
         }), 500
+
+
+@app.route('/api/v1/todos', methods=['DELETE'])
+@custom_jwt_required
+def delete_all_todos():
+    currentUser = users.find_one({"username": get_jwt_identity()})
+
+    result = todos.delete_many({"createdBy": ObjectId(currentUser["_id"])})
+
+    if result.deleted_count > 0:
+        return jsonify({
+            "success": True,
+            "message": "TODOs deleted successfully"
+        }), 200
+    else:
+        return jsonify({
+            "success": False,
+            "message": "Failed to delete TODOs"
+        }), 500
