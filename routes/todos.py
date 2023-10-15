@@ -61,6 +61,8 @@ def create_todo():
     currentUser = users.find_one({"username": get_jwt_identity()})
     new_todo["createdBy"] = ObjectId(currentUser["_id"])
 
+    new_todo.pop("_id", None)
+
     todos.insert_one(new_todo)
 
     return jsonify({
