@@ -14,6 +14,7 @@ jwt = JWTManager(app)
 
 app.config["MONGO_URI"] = os.getenv("MONGODB_URI")
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False
 
 Database().setup(app)
 
