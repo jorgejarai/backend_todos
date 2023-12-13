@@ -31,7 +31,15 @@ def custom_jwt_required(view_func):
 def get_todos():
     currentUser = users.find_one({"username": get_jwt_identity()})
 
-    matching_todos = todos.find({"createdBy": ObjectId(currentUser["_id"])})
+    query = {"createdBy": ObjectId(currentUser["_id"])}
+
+    tags = request.args.get('tags')
+    if tags:
+        tags_array = tags.split(',')
+
+        query["labels"] = {"$all": tags_array}
+
+    matching_todos = todos.find(query)
     matching_todos = [{**todo, "_id": str(todo["_id"]), "createdBy": str(todo['createdBy'])}
                       for todo in matching_todos]
 
