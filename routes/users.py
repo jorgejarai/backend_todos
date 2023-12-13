@@ -65,6 +65,7 @@ def get_me():
         "success": True,
         "user": {
             "username": user['username'],
-            "name": user['name']
+            "name": user['name'],
+            "email": user['email'] if 'email' in user else None
         }
     }), 200
