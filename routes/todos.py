@@ -33,11 +33,13 @@ def get_todos():
 
     query = {"createdBy": ObjectId(currentUser["_id"])}
 
-    tags = request.args.get('tags')
-    if tags:
-        tags_array = tags.split(',')
-
-        query["labels"] = {"$all": tags_array}
+    search = request.args.get('search')
+    if search:
+        query["$or"] = [
+            {"title": {"$regex": search.strip(), "$options": "i"}},
+            {"description": {"$regex": search.strip(), "$options": "i"}},
+            {"labels": {"$regex": search.strip(), "$options": "i"}}
+        ]
 
     matching_todos = todos.find(query)
     matching_todos = [{**todo, "_id": str(todo["_id"]), "createdBy": str(todo['createdBy'])}
