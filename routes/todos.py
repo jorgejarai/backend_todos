@@ -131,13 +131,10 @@ def update_todo(id):
     updated_data.pop("createdBy", None)
 
     # Update the todo with the new data
-    result = todos.update_one({"_id": ObjectId(id)}, {
+    todos.update_one({"_id": ObjectId(id)}, {
                               "$set": updated_data})
 
-    if result.modified_count == 1:
-        return jsonify({"success": True, "message": "Todo updated successfully"}), 200
-    else:
-        return jsonify({"success": False, "message": "Failed to update todo"}), 500
+    return jsonify({"success": True, "message": "Todo updated successfully"}), 200
 
 
 @app.route('/api/v1/todos/<id>', methods=['DELETE'])
